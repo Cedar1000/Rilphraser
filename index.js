@@ -73,6 +73,38 @@ app.post('/scrape-and-rewrite', async (req, res) => {
   }
 });
 
+app.post('/rewrite-only', async (req, res) => {
+  const text = req.body.text.match(/.{1,2000}/g);
+
+  try {
+    const textSplitted = text.map(async (sentence) => {
+      const rephrase = await axios.post(
+        'https://api.apilayer.com/paraphraser',
+        sentence,
+        {
+          headers: {
+            // apikey: `3ZO4hkweC4pfVN3ZIE9pBbbXyrcPdoVe`,
+            apiKey: process.env.API_KEY,
+          },
+        }
+      );
+
+      return rephrase.data;
+    });
+
+    const paraphrase = await Promise.all(textSplitted);
+
+    const result = paraphrase.map((result) => result.paraphrased);
+
+    res.status(200).json({
+      status: 'success',
+      data: result,
+    });
+  } catch (error) {
+    console.error(error);
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
