@@ -1,5 +1,8 @@
+const { Configuration, OpenAIApi, createEdit } = require('openai');
+
 const dotenv = require('dotenv');
 dotenv.config({ path: 'config.env' });
+
 const express = require('express');
 const cors = require('cors');
 
@@ -10,6 +13,13 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+const configuration = new Configuration({
+  organization: 'org-pR5f7p7el93EFBbWk8OJ8QOa',
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const openai = new OpenAIApi(configuration);
 
 const url = 'https://renaissancelabs.org/';
 
@@ -38,31 +48,19 @@ app.post('/scrape-and-rewrite', async (req, res) => {
   const { url } = req.body;
 
   try {
-    const response = await axios.get(url);
+    const html = await axios.get(url);
 
-    const $ = cheerio.load(response.data);
-    const text = $('p')
-      .text()
-      .match(/.{1,2000}/g);
+    const $ = cheerio.load(html.data);
+    const input = $('p').text();
+    console.log(input);
 
-    const textSplitted = text.map(async (sentence) => {
-      const rephrase = await axios.post(
-        'https://api.apilayer.com/paraphraser',
-        sentence,
-        {
-          headers: {
-            // apikey: `3ZO4hkweC4pfVN3ZIE9pBbbXyrcPdoVe`,
-            apiKey: process.env.API_KEY,
-          },
-        }
-      );
-
-      return rephrase.data;
+    const response = await openai.createEdit({
+      model: 'code-davinci-edit-001',
+      input,
+      instruction: 'rewrite the sentence in another way',
     });
 
-    const paraphrase = await Promise.all(textSplitted);
-
-    const result = paraphrase.map((result) => result.paraphrased);
+    const [result] = response.data.choices;
 
     res.status(200).json({
       status: 'success',
@@ -70,38 +68,36 @@ app.post('/scrape-and-rewrite', async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+
+    res.status(500).json({
+      status: 'failed',
+      data: error,
+    });
   }
 });
 
 app.post('/rewrite-only', async (req, res) => {
-  const text = req.body.text.match(/.{1,2000}/g);
+  const { input } = req.body;
 
   try {
-    const textSplitted = text.map(async (sentence) => {
-      const rephrase = await axios.post(
-        'https://api.apilayer.com/paraphraser',
-        sentence,
-        {
-          headers: {
-            // apikey: `3ZO4hkweC4pfVN3ZIE9pBbbXyrcPdoVe`,
-            apiKey: process.env.API_KEY,
-          },
-        }
-      );
-
-      return rephrase.data;
+    const response = await openai.createEdit({
+      model: 'code-davinci-edit-001',
+      input,
+      instruction: 'rewrite the sentence in another way',
     });
 
-    const paraphrase = await Promise.all(textSplitted);
-
-    const result = paraphrase.map((result) => result.paraphrased);
+    const [result] = response.data.choices;
 
     res.status(200).json({
       status: 'success',
-      data: result,
+      data: result.text.replace(/[\r\n]/gm, ''),
     });
   } catch (error) {
     console.error(error);
+    res.status(500).json({
+      status: 'Failed',
+      data: error,
+    });
   }
 });
 
